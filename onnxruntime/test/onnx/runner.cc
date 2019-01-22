@@ -457,12 +457,17 @@ EXECUTE_RESULT DataRunner::RunTaskImpl(size_t task_id) {
       }
     }
 
+    if (compare_result == COMPARE_RESULT::SUCCESS) {
+      // Debug purposes: log successful tests as well.
+      LOGS_DEFAULT(WARNING) << test_case_name_ << ":output=" << output_name;
+    }
+
     if (compare_result != COMPARE_RESULT::SUCCESS && !ret.second.empty()) {
       LOGS_DEFAULT(ERROR) << test_case_name_ << ":output=" << output_name << ":" << ret.second;
     }
-    if (compare_result != COMPARE_RESULT::SUCCESS) {
-      break;
-    }
+    // if (compare_result != COMPARE_RESULT::SUCCESS) {
+    //   break;
+    // }
   }
   for (auto& kvp : expected_output_values) {
     OrtReleaseValue(kvp.second);
