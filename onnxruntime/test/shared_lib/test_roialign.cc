@@ -16,18 +16,28 @@ using namespace onnxruntime;
 void RunSession(OrtAllocator* env, OrtSession* session_object,
                 const std::vector<size_t>& dims_x,
                 const std::vector<float>& values_x,
+                const std::vector<size_t>& dims_rois,
+                const std::vector<float>& values_rois,
                 const std::vector<int64_t>& dims_y,
                 const std::vector<float>& values_y,
                 OrtValue* output_tensor) {
   std::unique_ptr<OrtValue, decltype(&OrtReleaseValue)> value_x(nullptr, OrtReleaseValue);
-  std::vector<OrtValue*> inputs(1);
+  std::unique_ptr<OrtValue, decltype(&OrtReleaseValue)> value_rois(nullptr, OrtReleaseValue);
+  std::vector<OrtValue*> inputs(2);
+
   inputs[0] = OrtCreateTensorAsOrtValue(env, dims_x, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT);
   value_x.reset(inputs[0]);
   void* raw_data;
   ORT_THROW_ON_ERROR(OrtGetTensorMutableData(inputs[0], &raw_data));
   memcpy(raw_data, values_x.data(), values_x.size() * sizeof(values_x[0]));
-  std::vector<const char*> input_names{"X"};
-  const char* output_names[] = {"Y"};
+
+  inputs[1] = OrtCreateTensorAsOrtValue(env, dims_rois, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT);
+  value_rois.reset(inputs[1]);
+  ORT_THROW_ON_ERROR(OrtGetTensorMutableData(inputs[1], &raw_data));
+  memcpy(raw_data, values_rois.data(), values_rois.size() * sizeof(values_rois[0]));
+
+  std::vector<const char*> input_names{"x", "rois"};
+  const char* output_names[] = {"y"};
   bool is_output_allocated_by_ort = output_tensor == nullptr;
   OrtValue* old_output_ptr = output_tensor;
   ORT_THROW_ON_ERROR(OrtRun(session_object, NULL, input_names.data(), inputs.data(), inputs.size(), output_names, 1, &output_tensor));
@@ -40,7 +50,7 @@ void RunSession(OrtAllocator* env, OrtSession* session_object,
     ORT_THROW_ON_ERROR(OrtGetTensorShapeAndType(output_tensor, &shape_info_ptr));
     shape_info.reset(shape_info_ptr);
   }
-  size_t rtensor_dims = OrtGetNumOfDimensions(shape_info.get());
+  int64_t rtensor_dims = OrtGetNumOfDimensions(shape_info.get());
   std::vector<int64_t> shape_array(rtensor_dims);
   OrtGetDimensions(shape_info.get(), shape_array.data(), shape_array.size());
   ASSERT_EQ(shape_array, dims_y);
@@ -61,6 +71,8 @@ template <typename T>
 void TestInference(OrtEnv* env, T model_uri,
                    const std::vector<size_t>& dims_x,
                    const std::vector<float>& values_x,
+                   const std::vector<size_t>& dims_rois,
+                   const std::vector<float>& values_rois,
                    const std::vector<int64_t>& expected_dims_y,
                    const std::vector<float>& expected_values_y,
                    int provider_type, bool custom_op) {
@@ -91,7 +103,7 @@ void TestInference(OrtEnv* env, T model_uri,
     std::cout << "Running simple inference with default provider" << std::endl;
   }
   if (custom_op) {
-    sf.AppendCustomOpLibPath("libonnxruntime_custom_op_shared_lib_test.so");
+    sf.AppendCustomOpLibPath("libonnxruntime_custom_op_shared_lib_roialign.so");
   }
   std::unique_ptr<OrtSession, decltype(&OrtReleaseSession)>
       inference_session(sf.OrtCreateSession(model_uri), OrtReleaseSession);
@@ -102,6 +114,8 @@ void TestInference(OrtEnv* env, T model_uri,
              inference_session.get(),
              dims_x,
              values_x,
+             dims_rois,
+             values_rois,
              expected_dims_y,
              expected_values_y,
              nullptr);
@@ -124,111 +138,41 @@ void TestInference(OrtEnv* env, T model_uri,
                inference_session.get(),
                dims_x,
                values_x,
+               dims_rois,
+               values_rois,
                expected_dims_y,
                expected_values_y,
                value_y.get());
 }
 
-static constexpr PATH_TYPE MODEL_URI = TSTR("testdata/mul_1.pb");
-static constexpr PATH_TYPE CUSTOM_OP_MODEL_URI = TSTR("testdata/foo_1.pb");
+static constexpr PATH_TYPE MODEL_URI = TSTR("roialign.onnx");
 
 class CApiTestWithProvider : public CApiTest,
                              public ::testing::WithParamInterface<int> {
 };
 
-// // Tests that the Foo::Bar() method does Abc.
-// TEST_P(CApiTestWithProvider, simple) {
-//   // simple inference test
-//   // prepare inputs
-//   std::vector<size_t> dims_x = {3, 2};
-//   std::vector<float> values_x = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
-
-//   // prepare expected inputs and outputs
-//   std::vector<int64_t> expected_dims_y = {3, 2};
-//   std::vector<float> expected_values_y = {1.0f, 4.0f, 9.0f, 16.0f, 25.0f, 36.0f};
-
-//   TestInference<PATH_TYPE>(env, MODEL_URI, dims_x, values_x, expected_dims_y, expected_values_y, GetParam(), false);
-// }
-
-// INSTANTIATE_TEST_CASE_P(CApiTestWithProviders,
-//                         CApiTestWithProvider,
-//                         ::testing::Values(0, 1, 2, 3, 4));
-
-#ifndef _WIN32
-//doesn't work, failed in type comparison
-TEST_P(CApiTestWithProvider, custom_op) {
-  std::cout << "Running custom op inference" << std::endl;
-  std::vector<size_t> dims_x = {3, 2};
-  std::vector<float> values_x = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f};
+// Tests that the Foo::Bar() method does Abc.
+TEST_P(CApiTestWithProvider, simple) {
+  // simple inference test
+  // prepare inputs
+  std::vector<size_t> dims_x = {1, 3, 6, 6};
+  std::vector<float> values_x(1.0f, 3*6*6);
+  std::vector<size_t> dims_rois = {3, 5};
+  std::vector<float> values_rois(1.0f, 3*5);
 
   // prepare expected inputs and outputs
-  std::vector<int64_t> expected_dims_y = {3, 2};
-  std::vector<float> expected_values_y = {2.0f, 4.0f, 6.0f, 8.0f, 10.0f, 12.0f};
+  std::vector<int64_t> expected_dims_y = {3, 3, 1, 1};
+  std::vector<float> expected_values_y(0.0f, 3*3);
 
-  TestInference<PATH_TYPE>(env, CUSTOM_OP_MODEL_URI, dims_x, values_x, expected_dims_y, expected_values_y, false, true);
+  TestInference<PATH_TYPE>(env, MODEL_URI, dims_x, values_x, dims_rois, values_rois, expected_dims_y, expected_values_y, GetParam(), true);
 }
 
 INSTANTIATE_TEST_CASE_P(CApiTestWithProviders,
                         CApiTestWithProvider,
                         ::testing::Values(0, 1, 2, 3, 4));
-#endif
-
-#ifdef ORT_RUN_EXTERNAL_ONNX_TESTS
-TEST_F(CApiTest, create_session_without_session_option) {
-  constexpr PATH_TYPE model_uri = TSTR("../models/opset8/test_squeezenet/model.onnx");
-  OrtSession* ret;
-  ORT_THROW_ON_ERROR(::OrtCreateSession(env, model_uri, nullptr, &ret));
-  ASSERT_NE(nullptr, ret);
-  OrtReleaseSession(ret);
-}
-#endif
-TEST_F(CApiTest, create_tensor) {
-  const char* s[] = {"abc", "kmp"};
-  size_t expected_len = 2;
-  std::unique_ptr<MockedOrtAllocator> default_allocator(std::make_unique<MockedOrtAllocator>());
-  {
-    std::unique_ptr<OrtValue, decltype(&OrtReleaseValue)> tensor(
-        OrtCreateTensorAsOrtValue(default_allocator.get(), {expected_len}, ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING), OrtReleaseValue);
-    ORT_THROW_ON_ERROR(OrtFillStringTensor(tensor.get(), s, expected_len));
-    std::unique_ptr<OrtTensorTypeAndShapeInfo> shape_info;
-    {
-      OrtTensorTypeAndShapeInfo* shape_info_ptr;
-      ORT_THROW_ON_ERROR(OrtGetTensorShapeAndType(tensor.get(), &shape_info_ptr));
-      shape_info.reset(shape_info_ptr);
-    }
-    size_t len = static_cast<size_t>(OrtGetTensorShapeElementCount(shape_info.get()));
-    ASSERT_EQ(len, expected_len);
-    std::vector<int64_t> shape_array(len);
-
-    size_t data_len;
-    ORT_THROW_ON_ERROR(OrtGetStringTensorDataLength(tensor.get(), &data_len));
-    std::string result(data_len, '\0');
-    std::vector<size_t> offsets(len);
-    ORT_THROW_ON_ERROR(OrtGetStringTensorContent(tensor.get(), (void*)result.data(), data_len, offsets.data(), offsets.size()));
-  }
-}
-
-TEST_F(CApiTest, create_tensor_with_data) {
-  float values[] = {3.0f, 1.0f, 2.f, 0.f};
-  constexpr size_t values_length = sizeof(values) / sizeof(values[0]);
-  OrtAllocatorInfo* info;
-  ORT_THROW_ON_ERROR(OrtCreateAllocatorInfo("Cpu", OrtDeviceAllocator, 0, OrtMemTypeDefault, &info));
-  std::vector<size_t> dims = {4};
-  std::unique_ptr<OrtValue, decltype(&OrtReleaseValue)> tensor(
-      OrtCreateTensorWithDataAsOrtValue(info, values, values_length * sizeof(float), dims, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT), OrtReleaseValue);
-  OrtReleaseAllocatorInfo(info);
-  void* new_pointer;
-  ORT_THROW_ON_ERROR(OrtGetTensorMutableData(tensor.get(), &new_pointer));
-  ASSERT_EQ(new_pointer, values);
-  struct OrtTypeInfo* type_info;
-  ORT_THROW_ON_ERROR(OrtGetTypeInfo(tensor.get(), &type_info));
-  const struct OrtTensorTypeAndShapeInfo* tensor_info = OrtCastTypeInfoToTensorInfo(type_info);
-  ASSERT_NE(tensor_info, nullptr);
-  ASSERT_EQ(1, OrtGetNumOfDimensions(tensor_info));
-  OrtReleaseTypeInfo(type_info);
-}
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
+  std::cout << "Start testing\n";
   return RUN_ALL_TESTS();
 }
