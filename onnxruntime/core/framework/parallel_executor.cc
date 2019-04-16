@@ -52,7 +52,7 @@ Status ParallelExecutor::Execute(const SessionState& session_state,
     if (!p_op_kernel)
       continue;
 
-    //std::cout << "\t" << p_op_kernel->Node().Name() << std::endl;
+    std::cout << "\t" << p_op_kernel->Node().Name() << std::endl;
     EnqueueNode(node_index, session_state, logger);
   }
 

@@ -46,7 +46,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state,
   VLOGS(logger, 1) << "Size of execution plan vector: " << exec_plan_vec.size();
 
   // uncomment the line below to dump execution plan
-  //std::cout << std::make_pair(p_seq_exec_plan, &session_state) << "\n";
+  // std::cout << std::make_pair(p_seq_exec_plan, &session_state) << "\n";
 
   for (const auto& node_exec_plan : exec_plan_vec) {
     if (terminate_flag_) {
@@ -113,6 +113,7 @@ Status SequentialExecutor::Execute(const SessionState& session_state,
 
       kernel_begin_time = session_state.Profiler().StartTime();
     }
+    std::cout << "Computing kernel: " << p_op_kernel->Node().Name() << std::endl;
 
     const auto& compute_status = p_op_kernel->Compute(&op_kernel_context);
     if (!compute_status.IsOK()) {

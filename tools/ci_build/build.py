@@ -729,9 +729,9 @@ def main():
         build_targets(cmake_path, build_dir, configs, args.parallel)
 
     if args.test :
-        run_onnxruntime_tests(args, source_dir, ctest_path, build_dir, configs,
-                              args.enable_pybind if not args.skip_onnx_tests else False,
-                              args.use_tvm, args.use_tensorrt)
+        # run_onnxruntime_tests(args, source_dir, ctest_path, build_dir, configs,
+        #                       args.enable_pybind if not args.skip_onnx_tests else False,
+        #                       args.use_tvm, args.use_tensorrt)
         # run the onnx model tests if requested explicitly.
         if args.enable_onnx_tests and not args.skip_onnx_tests:
             # directory from ONNX submodule with ONNX test data
