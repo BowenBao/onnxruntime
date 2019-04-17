@@ -116,6 +116,8 @@ Status SequentialExecutor::Execute(const SessionState& session_state,
     std::cout << "Computing kernel: " << p_op_kernel->Node().Name() << std::endl;
 
     const auto& compute_status = p_op_kernel->Compute(&op_kernel_context);
+
+    std::cout << "Computing kernel finish: " << p_op_kernel->Node().Name() << std::endl;
     if (!compute_status.IsOK()) {
       std::ostringstream ss;
       ss << "Non-zero status code returned while running Node: " <<
