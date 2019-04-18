@@ -24,7 +24,21 @@ Status GatherBase::PrepareForCompute(OpKernelContext* context, Prepare& p) const
   std::vector<int64_t> shape(indices_shape.GetDims().begin(), indices_shape.GetDims().end());
   shape.insert(shape.begin(), input_data_shape.GetDims().begin(), input_data_shape.GetDims().begin() + p.axis);
   shape.insert(shape.end(), input_data_shape.GetDims().begin() + p.axis + 1, input_data_shape.GetDims().end());
-
+  // printf("gather input shape: ");
+  // for (size_t i = 0; i<input_data_shape.GetDims().size(); ++i) {
+  //   printf("%d ", int(input_data_shape.GetDims()[i]));
+  // }
+  // printf("\n");
+  // printf("gather indices shape: ");
+  // for (size_t i = 0; i<indices_shape.GetDims().size(); ++i) {
+  //   printf("%d ", int(indices_shape.GetDims()[i]));
+  // }
+  // printf("\n");
+  // printf("gather output shape: ");
+  // for (size_t i = 0; i<shape.size(); ++i) {
+  //   printf("%d ", int(shape[i]));
+  // }
+  // printf("\n");
   p.output_tensor = context->Output(0, TensorShape(shape));
 
   return Status::OK();
@@ -85,6 +99,11 @@ Status Gather::Compute(OpKernelContext* context) const {
   const int64_t N = p.indices_tensor->Shape().Size();
   const int64_t data_batch_bytes = input_data_shape.SizeFromDimension(p.axis) * element_bytes;
   const int64_t gathered_batch_bytes = N * block * element_bytes;
+
+  if (N <= 0) {
+    // empty indices input
+    return Status::OK();
+  }
 
   const uint8_t* src_base = static_cast<const uint8_t*>(p.input_tensor->DataRaw());
   uint8_t* dst_base = static_cast<uint8_t*>(p.output_tensor->MutableDataRaw());
