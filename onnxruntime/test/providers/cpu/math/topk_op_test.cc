@@ -249,12 +249,12 @@ TEST(TopKOperator, Top1ExplicitAxisMultiDInputOpset10) {
   RunTest(10, 1, input_vals, input_dimensions, expected_vals, expected_indices, expected_dimensions, axis);
 }
 
-TEST(TopKOperator, InvalidKOpset10) {
+TEST(TopKOperator, ZeroKOpset10) {
   std::vector<float> input_vals = {0.1f, 0.3f, 0.2f, 0.4f, 0.1f, 0.3f, 0.3f, 0.2f};
   std::vector<int64_t> input_dimensions = {2, 4};
-  std::vector<float> expected_vals = {0.4f, 0.3f, 0.2f, 0.1f, 0.3f, 0.3f, 0.2f, 0.1f};
-  std::vector<int64_t> expected_indices = {3, 1, 2, 0, 1, 2, 3, 0};
-  std::vector<int64_t> expected_dimensions = {2, 4};
+  std::vector<float> expected_vals = {};
+  std::vector<int64_t> expected_indices = {};
+  std::vector<int64_t> expected_dimensions = {2, 0};
   RunTest(10,
           0,
           input_vals,
@@ -262,9 +262,7 @@ TEST(TopKOperator, InvalidKOpset10) {
           expected_vals,
           expected_indices,
           expected_dimensions,
-          1,
-          OpTester::ExpectResult::kExpectFailure,
-          "value of k should be greater than 0");
+          1);
 }
 
 }  // namespace test
