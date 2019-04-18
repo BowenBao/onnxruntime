@@ -167,7 +167,14 @@ Status TopK<10, float>::Compute(OpKernelContext* p_op_kernel_context) const {
   const vector<int64_t>& y_shape = Y->Shape().GetDims();
   if (y_shape.size() != 1 || y_shape[0] != 1) return Status(common::ONNXRUNTIME, common::FAIL, "k tensor should be a 1D tensor of size 1");
   unsigned parsed_input_k = gsl::narrow_cast<unsigned>(Y->template Data<int64_t>()[0]);
-  if (parsed_input_k <= 0) return Status(common::ONNXRUNTIME, common::FAIL, "value of k should be greater than 0");
+
+  if (parsed_input_k == 0) {
+    vector<int64_t> out_dims = X->Shape().GetDims();
+    auto axis_parsed = HandleNegativeAxis(axis_, out_dims.size());
+    out_dims[axis_parsed] = 0;
+    p_op_kernel_context->Output(0, out_dims);
+    return Status::OK();
+  }
   return TopKImpl(p_op_kernel_context, X, axis_, parsed_input_k);
 }
 
